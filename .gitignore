@@ -1,4 +1,10 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# เพิ่มใน .gitignore
+echo .env.local >> .gitignore
+echo .env >> .gitignore
+
+# Commit การเปลี่ยนแปลง
+git add .gitignore
+git commit -m "Add .env files to gitignore"# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
 /node_modules
@@ -39,5 +45,3 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-.env.local 
-.env 

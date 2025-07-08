@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
     }
 
     const result = await pool.query(
-      'INSERT INTO income (date, description, amount) VALUES ($1, $2, $3) RETURNING *',
+      'INSERT INTO income (date, description, amount, user_id) VALUES ($1, $2, $3, $4) RETURNING *',
       [date, description || '', parseFloat(amount)]
     )
     
