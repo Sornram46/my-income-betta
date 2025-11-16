@@ -226,11 +226,11 @@ export default function LoginPage() {
           </div>
 
           {/* Demo Account */}
-          <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+           <div className="mt-6 p-4 bg-gray-50 rounded-lg">
             <p className="text-sm text-gray-600 text-center">
               🎯 <strong>บัญชีทดสอบ:</strong><br />
-              Username: demo<br />
-              Password: password123
+              Username: <span className="font-mono">demo</span><br />
+              Password: <span className="font-mono">password123</span>
             </p>
           </div>
         </div>
