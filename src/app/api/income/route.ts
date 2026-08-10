@@ -70,14 +70,31 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url)
     const month = searchParams.get('month')
-    
-    if (!month) {
+    const year = searchParams.get('year')
+
+    if (!month && !year) {
       return NextResponse.json(
-        { error: 'Month parameter is required' }, 
+        { error: 'Month or year parameter is required' },
         { status: 400 }
       )
     }
 
+    if (year) {
+      console.log('🗓️ Fetching yearly income summary for:', { userId: user.userId, year })
+
+      const result = await pool.query(
+        `SELECT to_char(date, 'YYYY-MM') AS month, SUM(amount) AS total
+         FROM income
+         WHERE user_id = $1 AND to_char(date, 'YYYY') = $2
+         GROUP BY 1
+         ORDER BY 1 ASC`,
+        [user.userId, year]
+      )
+
+      console.log('✅ Yearly income summary found:', result.rows.length, 'months')
+      return NextResponse.json(result.rows)
+    }
+    
     console.log('🗓️ Fetching income for:', { userId: user.userId, month })
 
     // SELECT เฉพาะข้อมูลของ user ที่ login

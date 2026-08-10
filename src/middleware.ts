@@ -5,36 +5,29 @@ import { jwtVerify } from 'jose'
 const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsImlhdCI6MTUxNjIzOTAyMn0.KMUFsIDTnFmyG3nMiGM6H9FNFUROf3wh7SmqJp-QV30')
 
 export async function middleware(request: NextRequest) {
-  // Protected routes
-  const protectedPaths = ['/']
-  const isProtectedPath = protectedPaths.some(path => request.nextUrl.pathname === path)
+  // ปกป้องเฉพาะหน้าอื่น (ตัวอย่าง: /income, /betta-breeders, /smart-farm)
+  const protectedPaths = ['/income', '/betta-breeders', '/smart-farm']
+  const isProtectedPath = protectedPaths.includes(request.nextUrl.pathname)
 
   if (isProtectedPath) {
     const token = request.cookies.get('auth-token')?.value
-
-    if (!token) {
-      return NextResponse.redirect(new URL('/login', request.url))
-    }
-
+    if (!token) return NextResponse.redirect(new URL('/login', request.url))
     try {
       await jwtVerify(token, secret)
       return NextResponse.next()
-    } catch (error) {
+    } catch {
       return NextResponse.redirect(new URL('/login', request.url))
     }
   }
 
-  // Redirect to home if already logged in and trying to access login
+  // ถ้ามี token แล้วไปหน้า login ให้เด้งกลับหน้าแรก
   if (request.nextUrl.pathname === '/login') {
     const token = request.cookies.get('auth-token')?.value
-    
     if (token) {
       try {
         await jwtVerify(token, secret)
         return NextResponse.redirect(new URL('/', request.url))
-      } catch (error) {
-        // Token invalid, continue to login
-      }
+      } catch {}
     }
   }
 
@@ -42,5 +35,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/', '/login']
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 }
