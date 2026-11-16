@@ -15,7 +15,7 @@ export default function Home() {
       title: 'บันทึกพ่อแม่พันธุ์ปลากัด',
       description: 'จัดการข้อมูลพ่อแม่พันธุ์ปลากัด',
       icon: '🐟',
-      link: '/betta-breeders'
+      link: 'https://betta-track-front.onrender.com/'
     },
     {
       title:'smart farm',
