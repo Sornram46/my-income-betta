@@ -1,5 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { CalendarIcon, FishIcon, NoteIcon, SpinnerIcon } from '@/components/icons'
+import { Alert, Card, EmptyState, Page, PageHeader, inputCls, labelCls, primaryBtnCls } from '@/components/ui'
 
 export default function BettaBreederPage() {
   const [form, setForm] = useState({
@@ -9,22 +12,30 @@ export default function BettaBreederPage() {
     note: '',
     image_url: ''
   })
-  const [message, setMessage] = useState('')
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [data, setData] = useState([])
+  const [saving, setSaving] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    const res = await fetch('/api/betta-breeders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form)
-    })
-    if (res.ok) {
-      setMessage('✅ บันทึกข้อมูลสำเร็จ!')
-      setForm({ father_name: '', mother_name: '', breed_date: '', note: '', image_url: '' })
-      fetchData()
-    } else {
-      setMessage('❌ เกิดข้อผิดพลาด')
+    setSaving(true)
+    try {
+      const res = await fetch('/api/betta-breeders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form)
+      })
+      if (res.ok) {
+        setMessage({ type: 'success', text: 'บันทึกข้อมูลสำเร็จ!' })
+        setForm({ father_name: '', mother_name: '', breed_date: '', note: '', image_url: '' })
+        fetchData()
+      } else {
+        setMessage({ type: 'error', text: 'เกิดข้อผิดพลาด' })
+      }
+    } catch {
+      setMessage({ type: 'error', text: 'เครือข่ายมีปัญหา กรุณาลองใหม่' })
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -38,33 +49,66 @@ export default function BettaBreederPage() {
   useEffect(() => { fetchData() }, [])
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-100 via-indigo-50 to-purple-100 py-10">
-      <div className="max-w-2xl mx-auto bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
-        <h2 className="text-xl font-bold mb-4 text-blue-700">บันทึกข้อมูลพ่อแม่พันธุ์ปลากัด</h2>
-        <form onSubmit={handleSubmit} className="space-y-4 mb-6">
-          <input className="w-full border p-2 rounded" placeholder="ชื่อพ่อพันธุ์" value={form.father_name} onChange={e => setForm(f => ({ ...f, father_name: e.target.value }))} required />
-          <input className="w-full border p-2 rounded" placeholder="ชื่อแม่พันธุ์" value={form.mother_name} onChange={e => setForm(f => ({ ...f, mother_name: e.target.value }))} required />
-          <input className="w-full border p-2 rounded" type="date" value={form.breed_date} onChange={e => setForm(f => ({ ...f, breed_date: e.target.value }))} required />
-          <textarea className="w-full border p-2 rounded" placeholder="หมายเหตุ" value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} />
-          <input className="w-full border p-2 rounded" placeholder="ลิงก์รูปภาพ" value={form.image_url} onChange={e => setForm(f => ({ ...f, image_url: e.target.value }))} />
-          <button className="w-full bg-blue-600 text-white py-2 rounded" type="submit">บันทึก</button>
+    <Page className="max-w-4xl">
+      <PageHeader icon={<FishIcon className="h-6 w-6" />} title="พ่อแม่พันธุ์ปลากัด" subtitle="บันทึกและดูข้อมูลการผสมพันธุ์" />
+
+      <Card className="mb-6">
+        <h2 className="mb-4 text-lg font-semibold text-slate-900">เพิ่มข้อมูลใหม่</h2>
+        <AnimatePresence>{message && <Alert key={message.text} type={message.type}>{message.text}</Alert>}</AnimatePresence>
+        <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
+          <label className="block">
+            <span className={labelCls}>ชื่อพ่อพันธุ์</span>
+            <input className={inputCls} placeholder="ชื่อพ่อพันธุ์" value={form.father_name} onChange={e => setForm(f => ({ ...f, father_name: e.target.value }))} required />
+          </label>
+          <label className="block">
+            <span className={labelCls}>ชื่อแม่พันธุ์</span>
+            <input className={inputCls} placeholder="ชื่อแม่พันธุ์" value={form.mother_name} onChange={e => setForm(f => ({ ...f, mother_name: e.target.value }))} required />
+          </label>
+          <label className="block">
+            <span className={labelCls}><CalendarIcon className="h-4 w-4 text-slate-400" /> วันที่ผสม</span>
+            <input className={inputCls} type="date" value={form.breed_date} onChange={e => setForm(f => ({ ...f, breed_date: e.target.value }))} required />
+          </label>
+          <label className="block">
+            <span className={labelCls}>ลิงก์รูปภาพ</span>
+            <input className={inputCls} placeholder="https://..." value={form.image_url} onChange={e => setForm(f => ({ ...f, image_url: e.target.value }))} />
+          </label>
+          <label className="block sm:col-span-2">
+            <span className={labelCls}><NoteIcon className="h-4 w-4 text-slate-400" /> หมายเหตุ</span>
+            <textarea className={inputCls} rows={3} placeholder="หมายเหตุ" value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} />
+          </label>
+          <div className="sm:col-span-2">
+            <motion.button whileTap={{ scale: 0.98 }} className={primaryBtnCls} type="submit" disabled={saving}>
+              {saving ? <><SpinnerIcon /> กำลังบันทึก...</> : 'บันทึก'}
+            </motion.button>
+          </div>
         </form>
-        {message && <div className="mb-6 text-center text-green-700">{message}</div>}
-        <h3 className="text-lg font-semibold mb-2 text-blue-700">รายการพ่อแม่พันธุ์ปลากัด</h3>
-        <div className="grid gap-4">
-          {data.map((item: any) => (
-            <div key={item.id} className="p-4 border rounded shadow flex gap-4 items-center bg-gray-50">
-              {item.image_url && <img src={item.image_url} alt="Betta" className="w-20 h-20 object-cover rounded" />}
-              <div>
-                <div>พ่อพันธุ์: <b>{item.father_name}</b></div>
-                <div>แม่พันธุ์: <b>{item.mother_name}</b></div>
-                <div>วันที่ผสม: {item.breed_date}</div>
-                {item.note && <div>หมายเหตุ: {item.note}</div>}
+      </Card>
+
+      <h2 className="mb-3 px-1 text-lg font-semibold text-slate-900">รายการพ่อแม่พันธุ์</h2>
+      {data.length === 0 ? (
+        <EmptyState>ยังไม่มีข้อมูล</EmptyState>
+      ) : (
+        <ul className="grid gap-4 md:grid-cols-2">
+          {data.map((item: any, i: number) => (
+            <motion.li
+              key={item.id}
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, delay: Math.min(i, 8) * 0.05 }}
+              whileHover={{ y: -3 }}
+              className="flex flex-col gap-4 rounded-2xl bg-white p-4 shadow-[0_8px_30px_rgb(15_23_42/0.06)] ring-1 ring-slate-100 sm:flex-row sm:items-center"
+            >
+              {item.image_url && <img src={item.image_url} alt="ปลากัด" className="h-40 w-full rounded-xl object-cover sm:h-20 sm:w-20" />}
+              <div className="min-w-0 break-words text-slate-700">
+                <div>พ่อพันธุ์: <b className="text-slate-900">{item.father_name}</b></div>
+                <div>แม่พันธุ์: <b className="text-slate-900">{item.mother_name}</b></div>
+                <div className="text-sm text-slate-500">วันที่ผสม: {item.breed_date}</div>
+                {item.note && <div className="text-sm text-slate-500">หมายเหตุ: {item.note}</div>}
               </div>
-            </div>
+            </motion.li>
           ))}
-        </div>
-      </div>
-    </div>
+        </ul>
+      )}
+    </Page>
   )
 }

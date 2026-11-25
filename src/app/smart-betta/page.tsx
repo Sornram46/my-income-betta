@@ -1,13 +1,17 @@
 'use client'
 import { useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { BulbIcon, PowerIcon, SpinnerIcon, SproutIcon } from '@/components/icons'
+import { Alert, Card, Page, PageHeader } from '@/components/ui'
 
 export default function SmartBettaLight() {
   const [status, setStatus] = useState<'on' | 'off' | 'unknown'>('unknown')
-  const [loading, setLoading] = useState(false)
+  const [pending, setPending] = useState<'on' | 'off' | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const loading = pending !== null
 
   const send = async (cmd: 'on' | 'off') => {
-    setLoading(true)
+    setPending(cmd)
     setError(null)
     try {
       const res = await fetch('/api/iot/light', {
@@ -37,93 +41,83 @@ export default function SmartBettaLight() {
     } catch {
       setError('เครือข่ายมีปัญหา กรุณาตรวจสอบการเชื่อมต่อ')
     } finally {
-      setLoading(false)
+      setPending(null)
     }
   }
 
   const isOn = status === 'on'
-  const statusColor = isOn ? 'bg-green-500' : status === 'off' ? 'bg-gray-400' : 'bg-yellow-500'
-  const statusText = status === 'unknown' ? 'ไม่ทราบ' : isOn ? 'เปิด' : 'ปิด'
+  const statusText = status === 'unknown' ? 'ยังไม่ทราบสถานะ' : isOn ? 'ไฟเปิดอยู่' : 'ไฟปิดอยู่'
+  const statusTone =
+    status === 'unknown'
+      ? 'bg-amber-50 text-amber-700 ring-amber-200'
+      : isOn
+        ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+        : 'bg-slate-100 text-slate-600 ring-slate-200'
+  const dotTone = status === 'unknown' ? 'bg-amber-500' : isOn ? 'bg-emerald-500' : 'bg-slate-400'
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-sky-50 to-cyan-100 px-4 py-10">
-      <div className="mx-auto w-full max-w-md">
-        {/* Header */}
-        <div className="text-center mb-6">
-          <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">ควบคุมไฟ (HiveMQ)</h1>
-          <p className="text-slate-600 mt-1">สั่งงาน IoT ผ่าน MQTT</p>
+    <Page className="max-w-xl">
+      <PageHeader icon={<SproutIcon className="h-6 w-6" />} title="ฟาร์มอัจฉริยะ" subtitle="ควบคุมไฟผ่าน MQTT (HiveMQ)" />
+
+      <Card className="text-center sm:p-8">
+        {/* หลอดไฟ */}
+        <div className="relative mx-auto mb-6 flex h-36 w-36 items-center justify-center">
+          <motion.span
+            className="absolute inset-0 rounded-full bg-amber-300"
+            animate={isOn ? { opacity: [0.25, 0.5, 0.25], scale: [1, 1.2, 1] } : { opacity: 0, scale: 1 }}
+            transition={isOn ? { duration: 2.4, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.3 }}
+          />
+          <motion.div
+            animate={{ scale: isOn ? 1.08 : 1 }}
+            transition={{ type: 'spring', stiffness: 260, damping: 16 }}
+            className={`relative flex h-28 w-28 items-center justify-center rounded-full transition-colors duration-500 ${
+              isOn ? 'bg-amber-100 text-amber-500 shadow-lg shadow-amber-300/60' : 'bg-slate-100 text-slate-400'
+            }`}
+          >
+            <BulbIcon className="h-14 w-14" />
+          </motion.div>
         </div>
 
-        {/* Card */}
-        <div className="rounded-2xl bg-white/90 shadow-xl ring-1 ring-black/5 p-6 sm:p-7">
-          {/* Lamp Icon */}
-          <div className="flex items-center justify-center mb-4">
-            <div className={`h-24 w-24 rounded-full ${isOn ? 'bg-green-100' : 'bg-gray-100'} flex items-center justify-center shadow-inner transition`}>
-              <span className={`text-5xl ${isOn ? 'text-green-600' : 'text-gray-500'}`}>💡</span>
-            </div>
-          </div>
-
-          {/* Status */}
-          <div className="flex items-center justify-center gap-2 mb-6">
-            <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-medium text-white ${statusColor}`}>
-              <span className="h-2 w-2 rounded-full bg-white/80"></span>
-              สถานะ: {statusText}
-            </span>
-            {loading && (
-              <span className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-medium bg-sky-500 text-white animate-pulse">
-                กำลังส่งคำสั่ง...
-              </span>
-            )}
-          </div>
-
-          {/* Controls - Modern Dual Buttons */}
-          <div className="grid grid-cols-2 gap-3 w-full">
-            <button
-              disabled={loading}
-              onClick={() => send('on')}
-              className={`group w-full px-4 py-3 rounded-xl font-semibold transition
-                bg-gradient-to-br from-green-500 to-emerald-600 text-white
-                shadow-sm hover:shadow-md hover:brightness-110 active:scale-[0.99]
-                disabled:opacity-60 disabled:cursor-not-allowed`}
-            >
-              <span className="inline-flex items-center gap-2">
-                <span className="text-xl">⚡</span>
-                เปิด
-              </span>
-            </button>
-            <button
-              disabled={loading}
-              onClick={() => send('off')}
-              className={`group w-full px-4 py-3 rounded-xl font-semibold transition
-                bg-gradient-to-br from-rose-500 to-red-600 text-white
-                shadow-sm hover:shadow-md hover:brightness-110 active:scale-[0.99]
-                disabled:opacity-60 disabled:cursor-not-allowed`}
-            >
-              <span className="inline-flex items-center gap-2">
-                <span className="text-xl">🛑</span>
-                ปิด
-              </span>
-            </button>
-          </div>
-
-          {/* Helper */}
-          <div className="mt-5 text-center text-xs text-slate-500">
-            ใช้ HiveMQ Cloud: ส่งคำสั่งไปที่ MQTT topic ที่ตั้งค่าในระบบ
-          </div>
-
-          {/* Error */}
-          {error && (
-            <div className="mt-4 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
-              {error}
-            </div>
-          )}
+        {/* สถานะ */}
+        <div className="mb-8 flex items-center justify-center">
+          <span className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-medium ring-1 ${statusTone}`}>
+            <span className={`h-2 w-2 rounded-full ${dotTone} ${loading ? 'animate-pulse' : ''}`} />
+            {loading ? 'กำลังส่งคำสั่ง...' : statusText}
+          </span>
         </div>
 
-        {/* Footer */}
-        <div className="text-center mt-6 text-xs text-slate-500">
-          เคล็ดลับ: เปิด retained message บนอุปกรณ์เพื่อให้สถานะล่าสุด sync กลับเว็บ
+        {/* ปุ่มควบคุม */}
+        <div className="grid grid-cols-2 gap-3 sm:gap-4">
+          <motion.button
+            whileHover={{ scale: loading ? 1 : 1.03 }}
+            whileTap={{ scale: loading ? 1 : 0.96 }}
+            disabled={loading}
+            onClick={() => send('on')}
+            className="flex flex-col items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-5 font-semibold text-white shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {pending === 'on' ? <SpinnerIcon className="h-7 w-7" /> : <PowerIcon className="h-7 w-7" />}
+            เปิดไฟ
+          </motion.button>
+          <motion.button
+            whileHover={{ scale: loading ? 1 : 1.03 }}
+            whileTap={{ scale: loading ? 1 : 0.96 }}
+            disabled={loading}
+            onClick={() => send('off')}
+            className="flex flex-col items-center justify-center gap-2 rounded-2xl bg-slate-700 py-5 font-semibold text-white shadow-lg shadow-slate-700/30 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {pending === 'off' ? <SpinnerIcon className="h-7 w-7" /> : <PowerIcon className="h-7 w-7" />}
+            ปิดไฟ
+          </motion.button>
         </div>
-      </div>
-    </div>
+
+        <div className="mt-5 text-left">
+          <AnimatePresence>{error && <Alert type="error">{error}</Alert>}</AnimatePresence>
+        </div>
+
+        <p className="mt-2 text-xs text-slate-400">
+          เคล็ดลับ: เปิด retained message บนอุปกรณ์ เพื่อให้สถานะล่าสุด sync กลับเว็บ
+        </p>
+      </Card>
+    </Page>
   )
 }

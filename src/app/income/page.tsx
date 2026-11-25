@@ -1,7 +1,23 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState, type ReactNode } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
+import {
+  CalendarIcon,
+  ChartIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  CoinIcon,
+  ListIcon,
+  NoteIcon,
+  PlusIcon,
+  RefreshIcon,
+  SpinnerIcon,
+  TrendIcon,
+  WalletIcon,
+} from '@/components/icons'
+import { AnimatedNumber, Item, Reveal, Stagger } from '@/components/motion'
+import { Alert, Card, EmptyState, Page, PageHeader, inputCls, labelCls, primaryBtnCls } from '@/components/ui'
 
 type IncomeItem = {
   id: number
@@ -15,6 +31,41 @@ type YearlyIncomeItem = {
   total: number | string
 }
 
+const money = (n: number) => n.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+// เดือนปัจจุบันตามเวลาเครื่อง (ไม่ใช้ toISOString เพราะเป็นเวลา UTC ทำให้เดือนคลาดเคลื่อน)
+function currentMonth() {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+}
+
+function shiftMonth(monthStr: string, delta: number) {
+  const [y, m] = monthStr.split('-').map(Number)
+  const index = y * 12 + (m - 1) + delta
+  return `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, '0')}`
+}
+
+function Stat({ label, value, tone }: { label: string; value: ReactNode; tone: string }) {
+  return (
+    <div className={`rounded-2xl px-4 py-3 ${tone}`}>
+      <p className="text-xs text-slate-500 sm:text-sm">{label}</p>
+      <p className="text-base font-bold sm:text-lg">{value}</p>
+    </div>
+  )
+}
+
+function SectionTitle({ icon, title, subtitle }: { icon: ReactNode; title: string; subtitle: string }) {
+  return (
+    <div className="flex items-start gap-3">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">{icon}</div>
+      <div>
+        <h2 className="text-lg font-semibold text-slate-900 sm:text-xl">{title}</h2>
+        <p className="text-sm text-slate-500">{subtitle}</p>
+      </div>
+    </div>
+  )
+}
+
 export default function IncomePage() {
   const [form, setForm] = useState({ date: '', description: '', amount: '' })
   const [data, setData] = useState<IncomeItem[]>([])
@@ -23,12 +74,9 @@ export default function IncomePage() {
   const [loading, setLoading] = useState(false)
   const [yearlyLoading, setYearlyLoading] = useState(false)
   const [yearlyError, setYearlyError] = useState('')
-  const router = useRouter()
 
-  // เพิ่ม: state สำหรับเดือนที่เลือก (YYYY-MM)
-  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
-    return new Date().toISOString().slice(0, 7)
-  })
+  // เดือนที่เลือก (YYYY-MM)
+  const [selectedMonth, setSelectedMonth] = useState<string>(currentMonth)
   const selectedYear = selectedMonth.slice(0, 4)
 
   function setYearOnly(year: string) {
@@ -36,14 +84,6 @@ export default function IncomePage() {
     setSelectedMonth(`${year}-${selectedMonth.slice(5, 7)}`)
   }
 
-  // helper เลื่อนเดือน
-  function shiftMonth(monthStr: string, delta: number) {
-    const [y, m] = monthStr.split('-').map(Number)
-    const d = new Date(y, (m - 1) + delta, 1)
-    return d.toISOString().slice(0, 7)
-  }
-
-  // แก้: รับเดือนเป็นพารามิเตอร์
   const fetchData = async (month = selectedMonth) => {
     try {
       setLoading(true)
@@ -134,17 +174,15 @@ export default function IncomePage() {
       ? ((trendData[trendData.length - 1].cumulative - trendData[0].amount) / trendData[0].amount) * 100
       : null
 
-  const chartPoints = trendData
-    .map((item, index) => {
-      const x = trendData.length === 1 ? 50 : 8 + (index / (trendData.length - 1)) * 84
-      const y = peakValue === 0 ? 82 : 82 - (item.cumulative / peakValue) * 58
-      return `${x},${y}`
-    })
-    .join(' ')
-
-  const areaPath = chartPoints
-    ? `M 8 82 L ${chartPoints.replace(/ /g, ' L ')} L 92 82 Z`
+  // พิกัดกราฟเส้น (หน่วยเป็น % ของกรอบกราฟ)
+  const pointCount = trendData.length
+  const xPct = (i: number) => (pointCount === 1 ? 50 : (i / (pointCount - 1)) * 100)
+  const yPct = (v: number) => (peakValue === 0 ? 100 : 100 - (v / peakValue) * 85)
+  const linePoints = trendData.map((item, i) => `${xPct(i)},${yPct(item.cumulative)}`).join(' ')
+  const areaPath = pointCount
+    ? `M ${xPct(0)} 100 L ${linePoints.replace(/ /g, ' L ')} L ${xPct(pointCount - 1)} 100 Z`
     : ''
+  const labelStep = Math.max(1, Math.ceil(pointCount / 8))
 
   const yearlyTotalsMap = new Map(yearlyData.map((item) => [item.month, Number(item.total || 0)]))
   const yearlyTrendData = Array.from({ length: 12 }, (_, index) => {
@@ -169,25 +207,33 @@ export default function IncomePage() {
   const yearlyAverage = activeMonthsCount ? yearlyTotal / activeMonthsCount : 0
   const yearlyPeakValue = Math.max(...yearlyTrendData.map((item) => item.total), 0)
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-100 via-indigo-50 to-purple-100 py-10">
-      {/* ปุ่มกลับหน้าหลัก */}
-      <div className="max-w-4xl mx-auto px-4 -mt-4 mb-6 flex items-center justify-between gap-4">
-        <button
-          onClick={() => router.push('/')}
-          className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 bg-white/80 backdrop-blur px-4 py-2 rounded-lg shadow border border-blue-100"
-          aria-label="กลับหน้าหลัก"
-        >
-          <span className="text-lg">←</span>
-          <span>กลับหน้าหลัก</span>
-        </button>
+  const iconBtn =
+    'flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 hover:text-blue-700'
 
-        {/* ตัวเลือกเดือนและปี */}
-        <div className="flex flex-wrap items-center gap-2 bg-white/80 backdrop-blur px-3 py-2 rounded-lg shadow border border-gray-200">
+  return (
+    <Page>
+      <PageHeader icon={<WalletIcon className="h-6 w-6" />} title="รายรับ" subtitle="บันทึกและติดตามรายรับของคุณ" />
+
+      {/* เลือกเดือน/ปี */}
+      <Card className="mb-4 !p-3 sm:mb-6 sm:!p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-1 items-center gap-2 sm:flex-none">
+            <motion.button whileTap={{ scale: 0.9 }} className={iconBtn} onClick={() => setSelectedMonth((m) => shiftMonth(m, -1))} aria-label="เดือนก่อนหน้า">
+              <ChevronLeftIcon className="h-5 w-5" />
+            </motion.button>
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => e.target.value && setSelectedMonth(e.target.value)}
+              className={`${inputCls} !w-auto min-w-0 flex-1 !py-2 sm:flex-none`}
+              aria-label="เดือน"
+            />
+            <motion.button whileTap={{ scale: 0.9 }} className={iconBtn} onClick={() => setSelectedMonth((m) => shiftMonth(m, 1))} aria-label="เดือนถัดไป">
+              <ChevronRightIcon className="h-5 w-5" />
+            </motion.button>
+          </div>
           <div className="flex items-center gap-2">
-            <label htmlFor="year-picker" className="text-sm text-gray-600">
-              ปี
-            </label>
+            <label htmlFor="year-picker" className="text-sm text-slate-500">ปี</label>
             <input
               id="year-picker"
               type="number"
@@ -195,313 +241,320 @@ export default function IncomePage() {
               max="2100"
               value={selectedYear}
               onChange={(e) => setYearOnly(e.target.value)}
-              className="w-24 border border-gray-300 rounded px-2 py-1 text-gray-700"
+              className={`${inputCls} !w-24 !py-2`}
             />
           </div>
-          <button
-            className="px-2 py-1 text-gray-600 hover:text-blue-700"
-            onClick={() => setSelectedMonth(m => shiftMonth(m, -1))}
-            aria-label="เดือนก่อนหน้า"
-          >
-            ‹
-          </button>
-          <input
-            type="month"
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(e.target.value)}
-            className="border border-gray-300 rounded px-2 py-1 text-gray-700"
-          />
-          <button
-            className="px-2 py-1 text-gray-600 hover:text-blue-700"
-            onClick={() => setSelectedMonth(m => shiftMonth(m, 1))}
-            aria-label="เดือนถัดไป"
-          >
-            ›
-          </button>
-          <button
+          <motion.button
+            whileTap={{ scale: 0.95 }}
             onClick={() => fetchData(selectedMonth)}
-            className="ml-2 text-sm bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded"
             disabled={loading}
+            className="ml-auto inline-flex items-center gap-2 rounded-xl bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 disabled:opacity-60"
           >
+            <RefreshIcon className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             โหลดใหม่
-          </button>
+          </motion.button>
         </div>
-      </div>
+      </Card>
 
-      <div className="max-w-4xl mx-auto grid md:grid-cols-2 gap-8">
-        {/* Summary Card */}
-        <div className="bg-gradient-to-r from-green-100 to-emerald-100 rounded-2xl shadow-xl p-8 flex flex-col justify-center items-center border border-green-200">
-          <h2 className="text-2xl font-bold text-green-700 mb-2">
-            ยอดรวมรายรับ • {selectedMonth}
-          </h2>
-          <p className="text-4xl font-extrabold text-green-800 mb-2">
-            {totalAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท
-          </p>
-          <span className="text-gray-500">อัปเดตล่าสุด: {new Date().toLocaleDateString('th-TH')}</span>
-        </div>
+      <Stagger className="grid gap-4 sm:gap-6 lg:grid-cols-5">
+        {/* ยอดรวม */}
+        <Item className="lg:col-span-2">
+          <div className="relative flex h-full min-h-48 flex-col justify-center overflow-hidden rounded-3xl bg-gradient-to-br from-blue-600 to-indigo-700 p-6 text-white shadow-xl shadow-blue-600/25 sm:p-8">
+            <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/10" />
+            <div className="absolute -bottom-12 -left-6 h-32 w-32 rounded-full bg-white/10" />
+            <p className="relative text-sm text-blue-100">ยอดรวมรายรับ • {selectedMonth}</p>
+            <p className="relative mt-2 break-words text-4xl font-extrabold sm:text-5xl">
+              <AnimatedNumber value={totalAmount} />
+            </p>
+            <p className="relative mt-1 text-blue-100">บาท</p>
+            <p className="relative mt-4 text-xs text-blue-200">อัปเดตล่าสุด: {new Date().toLocaleDateString('th-TH')}</p>
+          </div>
+        </Item>
 
-        {/* Form Section */}
-        <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
-          <h2 className="text-xl font-semibold text-blue-700 mb-6 flex items-center gap-2">
-            <span>➕</span> เพิ่มรายรับใหม่
-          </h2>
-          {error && (
-            <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6 rounded-r-lg text-red-700">
-              {error}
-            </div>
-          )}
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">📅 วันที่</label>
-              <input
-                type="date"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                value={form.date}
-                onChange={e => setForm({ ...form, date: e.target.value })}
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">📝 รายละเอียด</label>
-              <input
-                type="text"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                placeholder="เช่น เงินเดือน, งานพิเศษ, ขายของ"
-                value={form.description}
-                onChange={e => setForm({ ...form, description: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">💵 จำนวนเงิน (บาท)</label>
-              <input
-                type="number"
-                step="0.01"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                placeholder="0.00"
-                value={form.amount}
-                onChange={e => setForm({ ...form, amount: e.target.value })}
-                required
-              />
-            </div>
-            <button
-              type="submit"
-              className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200"
-              disabled={loading}
-            >
-              {loading ? 'กำลังบันทึก...' : '✅ บันทึกรายรับ'}
-            </button>
-          </form>
-        </div>
+        {/* ฟอร์มเพิ่มรายรับ */}
+        <Item className="lg:col-span-3">
+          <Card className="h-full">
+            <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-slate-900">
+              <PlusIcon className="h-5 w-5 text-blue-600" /> เพิ่มรายรับใหม่
+            </h2>
+            <AnimatePresence>{error && <Alert type="error">{error}</Alert>}</AnimatePresence>
+            <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
+              <label className="block">
+                <span className={labelCls}><CalendarIcon className="h-4 w-4 text-slate-400" /> วันที่</span>
+                <input
+                  type="date"
+                  className={inputCls}
+                  value={form.date}
+                  onChange={(e) => setForm({ ...form, date: e.target.value })}
+                  required
+                />
+              </label>
+              <label className="block">
+                <span className={labelCls}><CoinIcon className="h-4 w-4 text-slate-400" /> จำนวนเงิน (บาท)</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  inputMode="decimal"
+                  className={inputCls}
+                  placeholder="0.00"
+                  value={form.amount}
+                  onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                  required
+                />
+              </label>
+              <label className="block sm:col-span-2">
+                <span className={labelCls}><NoteIcon className="h-4 w-4 text-slate-400" /> รายละเอียด</span>
+                <input
+                  type="text"
+                  className={inputCls}
+                  placeholder="เช่น เงินเดือน, งานพิเศษ, ขายของ"
+                  value={form.description}
+                  onChange={(e) => setForm({ ...form, description: e.target.value })}
+                />
+              </label>
+              <div className="sm:col-span-2">
+                <motion.button whileTap={{ scale: 0.98 }} type="submit" className={primaryBtnCls} disabled={loading}>
+                  {loading ? <><SpinnerIcon /> กำลังบันทึก...</> : <><PlusIcon className="h-5 w-5" /> บันทึกรายรับ</>}
+                </motion.button>
+              </div>
+            </form>
+          </Card>
+        </Item>
+      </Stagger>
 
-        <div className="md:col-span-2 bg-white/95 rounded-2xl shadow-xl p-8 border border-sky-100">
-          <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between mb-6">
-            <div>
-              <h2 className="text-2xl font-semibold text-sky-800">กราฟการเติบโตของยอดขาย</h2>
-              <p className="text-sm text-gray-500">
-                แสดงรายรับสะสมรายวันของเดือน {selectedMonth} เพื่อดูแนวโน้มการเติบโต
-              </p>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
-              <div className="rounded-xl bg-sky-50 px-4 py-3 border border-sky-100">
-                <p className="text-gray-500">รายรับเฉลี่ยต่อวัน</p>
-                <p className="text-lg font-bold text-sky-800">
-                  {averagePerDay.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท
-                </p>
-              </div>
-              <div className="rounded-xl bg-emerald-50 px-4 py-3 border border-emerald-100">
-                <p className="text-gray-500">ยอดสะสมสูงสุด</p>
-                <p className="text-lg font-bold text-emerald-700">
-                  {peakValue.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท
-                </p>
-              </div>
-              <div className="rounded-xl bg-amber-50 px-4 py-3 border border-amber-100 col-span-2 md:col-span-1">
-                <p className="text-gray-500">การเติบโตจากวันแรก</p>
-                <p className="text-lg font-bold text-amber-700">
-                  {growthPercent === null ? 'ต้องมีมากกว่า 1 วัน' : `${growthPercent.toFixed(1)}%`}
-                </p>
-              </div>
+      {/* กราฟรายวัน */}
+      <Reveal className="mt-4 sm:mt-6">
+        <Card>
+          <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <SectionTitle
+              icon={<TrendIcon className="h-5 w-5" />}
+              title="การเติบโตของรายรับ"
+              subtitle={`รายรับสะสมรายวันของเดือน ${selectedMonth}`}
+            />
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <Stat label="เฉลี่ยต่อวัน" value={`${money(averagePerDay)} บาท`} tone="bg-sky-50 text-sky-800" />
+              <Stat label="ยอดสะสมสูงสุด" value={`${money(peakValue)} บาท`} tone="bg-emerald-50 text-emerald-700" />
+              <Stat
+                label="เติบโตจากวันแรก"
+                value={growthPercent === null ? 'ต้องมีมากกว่า 1 วัน' : `${growthPercent.toFixed(1)}%`}
+                tone="col-span-2 bg-amber-50 text-amber-700 sm:col-span-1"
+              />
             </div>
           </div>
 
           {trendData.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-sky-200 bg-sky-50/50 py-14 text-center text-gray-500">
-              ยังไม่มีข้อมูลพอสำหรับสร้างกราฟในเดือนนี้
-            </div>
+            <EmptyState>ยังไม่มีข้อมูลพอสำหรับสร้างกราฟในเดือนนี้</EmptyState>
           ) : (
-            <div className="space-y-4">
-              <div className="rounded-2xl bg-gradient-to-br from-sky-50 via-white to-emerald-50 border border-sky-100 p-4">
-                <svg viewBox="0 0 100 90" className="w-full h-64" preserveAspectRatio="none" role="img" aria-label="กราฟรายรับสะสมรายวัน">
-                  <defs>
-                    <linearGradient id="incomeArea" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#0ea5e9" stopOpacity="0.35" />
-                      <stop offset="100%" stopColor="#34d399" stopOpacity="0.08" />
-                    </linearGradient>
-                  </defs>
-                  {[14, 30, 46, 62, 78].map((yLine) => (
-                    <line key={yLine} x1="8" y1={yLine} x2="92" y2={yLine} stroke="#dbeafe" strokeWidth="0.6" strokeDasharray="2 2" />
-                  ))}
-                  <line x1="8" y1="82" x2="92" y2="82" stroke="#94a3b8" strokeWidth="0.8" />
-                  {areaPath && <path d={areaPath} fill="url(#incomeArea)" />}
-                  {chartPoints && <polyline fill="none" stroke="#0284c7" strokeWidth="1.8" points={chartPoints} />}
-                  {trendData.map((item, index) => {
-                    const x = trendData.length === 1 ? 50 : 8 + (index / (trendData.length - 1)) * 84
-                    const y = peakValue === 0 ? 82 : 82 - (item.cumulative / peakValue) * 58
+            <div key={selectedMonth} className="rounded-2xl bg-slate-50 px-6 pb-2 pt-6 sm:px-8">
+              <div className="relative h-48 sm:h-64 lg:h-72" role="img" aria-label="กราฟรายรับสะสมรายวัน">
+                {/* เส้นตาราง */}
+                {[15, 38, 61, 84].map((p) => (
+                  <div key={p} className="absolute inset-x-0 border-t border-dashed border-slate-200" style={{ top: `${p}%` }} />
+                ))}
+                <div className="absolute inset-x-0 bottom-0 border-t border-slate-300" />
 
-                    return (
-                      <g key={item.date}>
-                        <circle cx={x} cy={y} r="1.8" fill="#ffffff" stroke="#0284c7" strokeWidth="1.5" />
-                        <text x={x} y="88" textAnchor="middle" fontSize="3" fill="#64748b">
-                          {new Date(`${item.date}T00:00:00`).getDate()}
-                        </text>
-                      </g>
-                    )
-                  })}
-                </svg>
+                {/* เส้นและพื้นที่ใต้กราฟ เปิดเผยจากซ้ายไปขวา */}
+                <motion.div
+                  className="absolute inset-0"
+                  initial={{ clipPath: 'inset(0 100% 0 0)' }}
+                  animate={{ clipPath: 'inset(0 0% 0 0)' }}
+                  transition={{ duration: 1, ease: 'easeOut' }}
+                >
+                  <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full overflow-visible">
+                    <defs>
+                      <linearGradient id="incomeArea" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#2563eb" stopOpacity="0.3" />
+                        <stop offset="100%" stopColor="#2563eb" stopOpacity="0.02" />
+                      </linearGradient>
+                    </defs>
+                    <path d={areaPath} fill="url(#incomeArea)" />
+                    <polyline
+                      points={linePoints}
+                      fill="none"
+                      stroke="#2563eb"
+                      strokeWidth="2.5"
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  </svg>
+                </motion.div>
+
+                {/* จุดข้อมูล */}
+                {trendData.map((item, i) => (
+                  <span
+                    key={item.date}
+                    className="absolute -translate-x-1/2 -translate-y-1/2"
+                    style={{ left: `${xPct(i)}%`, top: `${yPct(item.cumulative)}%` }}
+                    title={`${item.label}: สะสม ${money(item.cumulative)} บาท`}
+                  >
+                    <motion.span
+                      className="block h-3 w-3 rounded-full border-2 border-blue-600 bg-white"
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ delay: 0.5 + (i / pointCount) * 0.6, type: 'spring', stiffness: 400, damping: 15 }}
+                    />
+                  </span>
+                ))}
               </div>
 
-              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                {trendData.map((item) => (
-                  <div key={item.date} className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
-                    <p className="text-sm text-gray-500">{item.label}</p>
-                    <p className="text-base font-semibold text-gray-800">
-                      +{item.amount.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท
-                    </p>
-                    <p className="text-sm text-emerald-600">
-                      สะสม {item.cumulative.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท
-                    </p>
-                  </div>
-                ))}
+              {/* วันที่ */}
+              <div className="relative mt-2 h-6">
+                {trendData.map((item, i) =>
+                  i % labelStep === 0 || i === pointCount - 1 ? (
+                    <span
+                      key={item.date}
+                      className="absolute -translate-x-1/2 text-xs text-slate-500"
+                      style={{ left: `${xPct(i)}%` }}
+                    >
+                      {new Date(`${item.date}T00:00:00`).getDate()}
+                    </span>
+                  ) : null
+                )}
               </div>
             </div>
           )}
-        </div>
 
-        <div className="md:col-span-2 bg-white/95 rounded-2xl shadow-xl p-8 border border-violet-100">
-          <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between mb-6">
-            <div>
-              <h2 className="text-2xl font-semibold text-violet-800">สรุปยอดรายปี {selectedYear}</h2>
-              <p className="text-sm text-gray-500">
-                ดูภาพรวมรายรับทั้งปี แยกตามเดือนจากปีที่เลือกอยู่ตอนนี้
-              </p>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
-              <div className="rounded-xl bg-violet-50 px-4 py-3 border border-violet-100">
-                <p className="text-gray-500">ยอดรวมทั้งปี</p>
-                <p className="text-lg font-bold text-violet-800">
-                  {yearlyTotal.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท
-                </p>
+          {trendData.length > 0 && (
+            <details className="group mt-4">
+              <summary className="cursor-pointer select-none text-sm font-medium text-blue-600 hover:text-blue-800">
+                ดูรายละเอียดรายวัน
+              </summary>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {trendData.map((item) => (
+                  <div key={item.date} className="rounded-xl bg-slate-50 px-4 py-3">
+                    <p className="text-sm text-slate-500">{item.label}</p>
+                    <p className="font-semibold text-slate-800">+{money(item.amount)} บาท</p>
+                    <p className="text-sm text-emerald-600">สะสม {money(item.cumulative)} บาท</p>
+                  </div>
+                ))}
               </div>
-              <div className="rounded-xl bg-cyan-50 px-4 py-3 border border-cyan-100">
-                <p className="text-gray-500">เฉลี่ยต่อเดือนที่มีรายการ</p>
-                <p className="text-lg font-bold text-cyan-700">
-                  {yearlyAverage.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท
-                </p>
-              </div>
-              <div className="rounded-xl bg-rose-50 px-4 py-3 border border-rose-100 col-span-2 md:col-span-1">
-                <p className="text-gray-500">เดือนที่ดีที่สุด</p>
-                <p className="text-lg font-bold text-rose-700">{bestMonth.shortLabel}</p>
-              </div>
+            </details>
+          )}
+        </Card>
+      </Reveal>
+
+      {/* สรุปรายปี */}
+      <Reveal className="mt-4 sm:mt-6">
+        <Card>
+          <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <SectionTitle
+              icon={<ChartIcon className="h-5 w-5" />}
+              title={`สรุปยอดรายปี ${selectedYear}`}
+              subtitle="ภาพรวมรายรับทั้งปี แยกตามเดือน"
+            />
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <Stat label="ยอดรวมทั้งปี" value={`${money(yearlyTotal)} บาท`} tone="bg-blue-50 text-blue-800" />
+              <Stat label="เฉลี่ยต่อเดือนที่มีรายการ" value={`${money(yearlyAverage)} บาท`} tone="bg-cyan-50 text-cyan-700" />
+              <Stat label="เดือนที่ดีที่สุด" value={bestMonth.shortLabel} tone="col-span-2 bg-rose-50 text-rose-700 sm:col-span-1" />
             </div>
           </div>
 
           {yearlyError ? (
-            <div className="rounded-2xl border border-red-100 bg-red-50 py-8 text-center text-red-700">
-              {yearlyError}
-            </div>
+            <div className="rounded-2xl bg-red-50 py-8 text-center text-red-700">{yearlyError}</div>
           ) : yearlyLoading ? (
-            <div className="rounded-2xl border border-dashed border-violet-200 bg-violet-50/50 py-14 text-center text-gray-500">
-              กำลังโหลดข้อมูลรายปี...
-            </div>
+            <EmptyState>
+              <span className="inline-flex items-center gap-2"><SpinnerIcon /> กำลังโหลดข้อมูลรายปี...</span>
+            </EmptyState>
           ) : yearlyTotal === 0 ? (
-            <div className="rounded-2xl border border-dashed border-violet-200 bg-violet-50/50 py-14 text-center text-gray-500">
-              ยังไม่มีข้อมูลรายรับในปี {selectedYear}
-            </div>
+            <EmptyState>ยังไม่มีข้อมูลรายรับในปี {selectedYear}</EmptyState>
           ) : (
-            <div className="space-y-4">
-              <div className="rounded-2xl bg-gradient-to-br from-violet-50 via-white to-cyan-50 border border-violet-100 p-5">
-                <div className="flex items-end gap-2 h-64">
-                  {yearlyTrendData.map((item) => {
+            <>
+              <div key={selectedYear} className="rounded-2xl bg-slate-50 p-3 sm:p-5">
+                <div className="flex h-64 items-end gap-1 sm:gap-2">
+                  {yearlyTrendData.map((item, i) => {
                     const heightPercent = yearlyPeakValue === 0 ? 0 : (item.total / yearlyPeakValue) * 100
+                    const isBest = item.total > 0 && item.month === bestMonth.month
 
                     return (
-                      <div key={item.month} className="flex-1 flex flex-col items-center gap-2">
-                        <div className="text-[10px] text-gray-500 h-8 flex items-end text-center">
-                          {item.total > 0
-                            ? item.total.toLocaleString('th-TH', { maximumFractionDigits: 0 })
-                            : '-'}
+                      <div key={item.month} className="flex min-w-0 flex-1 flex-col items-center gap-2">
+                        <div className="hidden h-8 items-end text-center text-[10px] text-slate-500 sm:flex">
+                          {item.total > 0 ? item.total.toLocaleString('th-TH', { maximumFractionDigits: 0 }) : '-'}
                         </div>
-                        <div className="w-full max-w-10 h-44 bg-white/70 rounded-t-xl rounded-b-md border border-violet-100 flex items-end overflow-hidden">
-                          <div
-                            className="w-full bg-gradient-to-t from-violet-600 via-fuchsia-500 to-cyan-400 transition-all duration-300"
-                            style={{ height: `${Math.max(heightPercent, item.total > 0 ? 8 : 0)}%` }}
-                            title={`${item.fullLabel}: ${item.total.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท`}
+                        <div
+                          className="flex h-44 w-full max-w-10 items-end overflow-hidden rounded-t-xl rounded-b-md bg-white ring-1 ring-slate-100"
+                          title={`${item.fullLabel}: ${money(item.total)} บาท`}
+                        >
+                          <motion.div
+                            className={`w-full ${isBest ? 'bg-gradient-to-t from-blue-600 to-cyan-400' : 'bg-gradient-to-t from-blue-400 to-sky-300'}`}
+                            initial={{ height: 0 }}
+                            animate={{ height: `${Math.max(heightPercent, item.total > 0 ? 8 : 0)}%` }}
+                            transition={{ duration: 0.7, ease: 'easeOut', delay: i * 0.05 }}
                           />
                         </div>
-                        <span className="text-xs text-slate-600">{item.shortLabel}</span>
+                        <span className="text-[10px] text-slate-600 sm:text-xs">{item.shortLabel}</span>
                       </div>
                     )
                   })}
                 </div>
               </div>
 
-              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                {yearlyTrendData.map((item) => (
-                  <div key={item.month} className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
-                    <p className="text-sm text-gray-500">{item.fullLabel}</p>
-                    <p className="text-base font-semibold text-gray-800">
-                      {item.total.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Data Section */}
-      <div className="max-w-4xl mx-auto mt-12 bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-semibold text-gray-800 flex items-center gap-2">
-            <span>📋</span> รายการรายรับประจำเดือน {selectedMonth}
-          </h2>
-        </div>
-        {loading && !data.length ? (
-          <div className="flex items-center justify-center py-8">
-            <span className="ml-2 text-gray-600">กำลังโหลดข้อมูล...</span>
-          </div>
-        ) : data.length === 0 ? (
-          <div className="text-center py-8">
-            <p className="text-gray-500">ยังไม่มีรายการรายรับในเดือนนี้</p>
-            <p className="text-sm text-gray-400 mt-1">เลือกเดือนอื่นหรือบันทึกรายรับใหม่</p>
-          </div>
-        ) : (
-          <div className="space-y-3 max-h-96 overflow-y-auto">
-            {data.map((item) => (
-              <div key={item.id} className="bg-gray-50 rounded-lg p-4 border border-gray-200 hover:bg-gray-100 transition">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <div className="flex items-center mb-1">
-                      <span className="text-sm text-gray-500 bg-white px-2 py-1 rounded-full">
-                        📅 {new Date(item.date).toLocaleDateString('th-TH')}
-                      </span>
+              <details className="mt-4">
+                <summary className="cursor-pointer select-none text-sm font-medium text-blue-600 hover:text-blue-800">
+                  ดูรายละเอียดรายเดือน
+                </summary>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {yearlyTrendData.map((item) => (
+                    <div key={item.month} className="rounded-xl bg-slate-50 px-4 py-3">
+                      <p className="text-sm text-slate-500">{item.fullLabel}</p>
+                      <p className="font-semibold text-slate-800">{money(item.total)} บาท</p>
                     </div>
-                    <p className="text-gray-800 font-medium">
-                      {item.description || 'ไม่มีรายละเอียด'}
-                    </p>
+                  ))}
+                </div>
+              </details>
+            </>
+          )}
+        </Card>
+      </Reveal>
+
+      {/* รายการรายรับ */}
+      <Reveal className="mt-4 sm:mt-6">
+        <Card>
+          <div className="mb-5">
+            <SectionTitle
+              icon={<ListIcon className="h-5 w-5" />}
+              title="รายการรายรับ"
+              subtitle={`ประจำเดือน ${selectedMonth}`}
+            />
+          </div>
+          {loading && !data.length ? (
+            <EmptyState>
+              <span className="inline-flex items-center gap-2"><SpinnerIcon /> กำลังโหลดข้อมูล...</span>
+            </EmptyState>
+          ) : data.length === 0 ? (
+            <EmptyState>
+              <p>ยังไม่มีรายการรายรับในเดือนนี้</p>
+              <p className="mt-1 text-sm text-slate-400">เลือกเดือนอื่นหรือบันทึกรายรับใหม่</p>
+            </EmptyState>
+          ) : (
+            <ul className="max-h-[28rem] space-y-3 overflow-y-auto pr-1">
+              {data.map((item, i) => (
+                <motion.li
+                  key={item.id}
+                  initial={{ opacity: 0, x: -16 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.3, delay: Math.min(i, 10) * 0.04 }}
+                  className="flex items-center justify-between gap-4 rounded-2xl bg-slate-50 p-4 transition-colors hover:bg-slate-100"
+                >
+                  <div className="min-w-0">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-xs text-slate-500 ring-1 ring-slate-200">
+                      <CalendarIcon className="h-3.5 w-3.5" />
+                      {new Date(item.date).toLocaleDateString('th-TH')}
+                    </span>
+                    <p className="mt-1.5 truncate font-medium text-slate-800">{item.description || 'ไม่มีรายละเอียด'}</p>
                   </div>
-                  <div className="text-right ml-4">
-                    <span className="text-lg font-bold text-green-600">
+                  <div className="shrink-0 text-right">
+                    <span className="text-lg font-bold text-emerald-600">
                       +{Number(item.amount).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
                     </span>
-                    <p className="text-xs text-gray-500">บาท</p>
+                    <p className="text-xs text-slate-400">บาท</p>
                   </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
+                </motion.li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      </Reveal>
+    </Page>
   )
 }
